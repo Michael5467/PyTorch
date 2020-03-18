@@ -1,8 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import sys
 import argparse
 
@@ -20,18 +18,68 @@ from torchvision import transforms, datasets
 import matplotlib.pyplot as plt
 import numpy as np
 
+class Model(nn.Module):
+    def __init__(self):
+        super(Model, self).__init__()
+        self.fc1 = nn.Linear(28*28, 16)
+        self.fc2 = nn.Linear(16, 16)
+        self.fc3 = nn.Linear(16, 10)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return F.log_softmax(x, dim=1)
+
+def train(args, net, device, train_data_set, optimizer, criterion, epoch,   train_losses, train_counter):
+    net.train()
+    for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
+
+        x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+
+        y_pred = net(x_batch.view(-1, 28*28))
+        loss = criterion(y_pred, y_batch)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if batch_idx % LOG_INTERVAL == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, 
+                batch_idx * len(x_batch), 
+                len(train_data_set.dataset),
+                100. * batch_idx / len(train_data_set), 
+                loss.item())
+            )
+            train_losses.append(loss.item())
+            train_counter.append( (batch_idx * DEF_BATCH_SIZE) + ((epoch)*len(train_data_set.dataset)) )
+            # torch.save(net.state_dict(), '/results/model.pth')
+            # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
+
+def test(args, net, device, test_data_set, criterion,   test_losses):
+    net.eval()
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for x_batch, y_batch in test_data_set:
+            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+            y_pred = net(x_batch.view(-1, 28*28))
+            test_loss += criterion(y_pred, y_batch, size_average=False).item()
+            pred = y_pred.data.max(1, keepdim=True)[1]
+            correct += pred.eq(y_batch.data.view_as(pred)).sum()
+            test_loss /= len(test_data_set.dataset)
+            test_losses.append(test_loss)
+            print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+                test_loss, 
+                correct, 
+                len(test_data_set.dataset),
+                100. * correct / len(test_data_set.dataset))
+            )
+
 DEF_BATCH_SIZE = 10
 LEARNING_RATE = 1e-3
 MOMENTUM = 0.5
 EPOCHS = 3
 LOG_INTERVAL = 10
-
-# random_seed = 1
-# torch.backends.cudnn.enabled = False
-# torch.manual_seed(random_seed)
-
-# # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # # fig, axs = plt.subplots(2, 2)
 # # for i in range(2):
@@ -73,86 +121,14 @@ LOG_INTERVAL = 10
 # plt.imshow(data[0][0].view(28,28))
 # plt.show()
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        self.fc1 = nn.Linear(28*28, 16)
-        self.fc2 = nn.Linear(16, 16)
-        self.fc3 = nn.Linear(16, 10)
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return F.log_softmax(x, dim=1)
+random_seed = 1
+torch.backends.cudnn.enabled = False
+torch.manual_seed(random_seed)
 
-
-def train(args, net, device, train_data_set, optimizer, criterion, epoch,   train_losses, train_counter):
-    net.train()
-    for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
-
-        x_batch = x_batch.view(-1, 28*28)
-        # x_batch = x_batch.to(device)
-        x_batch = x_batch.cuda(device)
-        # y_batch = y_batch.to(device)
-        y_batch = y_batch.cuda(device)
-        y_pred = net(x_batch)
-
-        loss = criterion(y_pred, y_batch)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        if batch_idx % LOG_INTERVAL == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, 
-                batch_idx * len(x_batch), 
-                len(train_data_set.dataset),
-                100. * batch_idx / len(train_data_set), 
-                loss.item())
-            )
-            train_losses.append(loss.item())
-            train_counter.append( (batch_idx * DEF_BATCH_SIZE) + ((epoch)*len(train_data_set.dataset)) )
-            # torch.save(net.state_dict(), '/results/model.pth')
-            # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
-
-
-def test(args, net, device, test_data_set, criterion,   test_losses):
-    net.eval()
-    test_loss = 0
-    correct = 0
-    with torch.no_grad():
-        for x_batch, y_batch in test_data_set:
-
-            x_batch = x_batch.view(-1, 28*28)
-            # x_batch = x_batch.to(device)
-            x_batch = x_batch.cuda(device)
-            # y_batch = y_batch.to(device)
-            y_batch = y_batch.cuda(device)
-            y_pred = net(x_batch)
-
-            test_loss += criterion(y_pred, y_batch, size_average=False).item()
-            pred = y_pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(y_batch.data.view_as(pred)).sum()
-            test_loss /= len(test_data_set.dataset)
-            test_losses.append(test_loss)
-            print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-                test_loss, 
-                correct, 
-                len(test_data_set.dataset),
-                100. * correct / len(test_data_set.dataset))
-            )
-
-def main():
-    random_seed = 1
-    torch.backends.cudnn.enabled = False
-    torch.manual_seed(random_seed)
-
-    use_cuda = torch.cuda.is_available()
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cuda:0" if use_cuda else "cpu")
-    # device = torch.device("cpu")
-    print(device)
-    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 # fig, axs = plt.subplots(2, 2)
 # for i in range(2):
@@ -162,34 +138,48 @@ def main():
 #         axs[i, j].set_title('%d:%d' %(i, j))
 # plt.show()
 
-    train_loader = datasets.MNIST('D:\\PyTorch\\', train=True,  transform = transforms.Compose([transforms.ToTensor()]), download=True)
-    test_loader  = datasets.MNIST('D:\\PyTorch\\', train=False, transform = transforms.Compose([transforms.ToTensor()]), download=True)
+train_loader = datasets.MNIST('D:\\PyTorch\\', train=True,  transform = transforms.Compose([transforms.ToTensor()]), download=True)
+test_loader  = datasets.MNIST('D:\\PyTorch\\', train=False, transform = transforms.Compose([transforms.ToTensor()]), download=True)
 
-    train_data_set = DataLoader(train_loader, batch_size=DEF_BATCH_SIZE, shuffle=True, **kwargs)
-    test_data_set  = DataLoader(test_loader,  batch_size=DEF_BATCH_SIZE, shuffle=False, **kwargs)
+train_data_set = DataLoader(train_loader, batch_size=DEF_BATCH_SIZE, shuffle=True)
+test_data_set  = DataLoader(test_loader,  batch_size=DEF_BATCH_SIZE, shuffle=False)
 
-    net = Model().to(device)
-    print(net)
+net = Model().to(device)
+print(net)
 
-    # x = torch.rand((28, 28))
-    # x = x.view(-1, 28*28)
-    # output = net(x)
-    # print (output)
+# x = torch.rand((28, 28))
+# x = x.view(-1, 28*28)
+# output = net(x)
+# print (output)
 
-    optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
+optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
 
-    criterion = F.nll_loss
-    # criterion = F.mse_loss
+criterion = F.nll_loss
+# criterion = F.mse_loss
 
-    train_losses  = []
-    train_counter = []
-    test_losses   = []
-    test_counter  = [i*len(train_data_set.dataset) for i in range(EPOCHS + 1)]
+train_losses  = []
+train_counter = []
+test_losses   = []
+test_counter  = [i*len(train_data_set.dataset) for i in range(EPOCHS + 1)]
 
-    # test("", net, device, test_data_set, criterion, test_losses)
-    for epoch in range(EPOCHS):
-        train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
-        test (0, net, device, test_data_set,  criterion, test_losses)
+for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
+    print(batch_idx) 
+    # print(x_batch) 
+    # print(y_batch) 
+    print(x_batch.size())
+    print(y_batch.size())
+
+    x_batch_linear = x_batch.view(-1, 28*28)
+    print(x_batch_linear) 
+    print(x_batch_linear.size())
+
+    break
+
+
+# test("", net, device, test_data_set, criterion, test_losses)
+# for epoch in range(EPOCHS):
+#     train('', net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
+#     test ('', net, device, test_data_set,  criterion, test_losses)
 
 # fig = plt.figure()
 # plt.plot(train_counter, train_losses, color='blue')
@@ -279,6 +269,3 @@ def main():
         
 # #         if batch_id % 100 == 0:
 # #             print(loss.data[0])
-
-if __name__ == '__main__':
-    main()
