@@ -23,60 +23,13 @@ import numpy as np
 DEF_BATCH_SIZE = 10
 LEARNING_RATE = 1e-3
 MOMENTUM = 0.5
-EPOCHS = 3
 LOG_INTERVAL = 10
 
-# random_seed = 1
-# torch.backends.cudnn.enabled = False
-# torch.manual_seed(random_seed)
-
-# # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# # fig, axs = plt.subplots(2, 2)
-# # for i in range(2):
-# #     for j in range(2):
-# #         Z = np.random.rand(6, 10)
-# #         axs[i, j].pcolor(Z)
-# #         axs[i, j].set_title('%d:%d' %(i, j))
-# # plt.show()
-
-# train = datasets.MNIST("D:\\PyTorch\\", train=True,  transform = transforms.Compose([transforms.ToTensor()]), download=True)
-# test  = datasets.MNIST("D:\\PyTorch\\", train=False, transform = transforms.Compose([transforms.ToTensor()]), download=True)
-
-# # train_data_set = torch.utils.data.DataLoader(train, batch_size=10, shuffle=True)
-# # test_data_set  = torch.utils.data.DataLoader(test,  batch_size=10, shuffle=False)
-# train_data_set = DataLoader(train, batch_size=DEF_BATCH_SIZE, shuffle=True)
-# test_data_set  = DataLoader(test,  batch_size=DEF_BATCH_SIZE, shuffle=False)
-
-# 1.
-# for data_ndx, data in enumerate(train_data_set):
-#     # print (data)
-#     print ("data")    
-#     break
-#     # if (data_ndx > 0):
-#         # break
-
-# 2.
-# print(len(train_data_set))
-# dataiter = iter(train_data_set)
-# for i in range(4):
-#     print("\ni=", i)
-#     print(dataiter.next())
-
-# 3.
-# dataiter = iter(train_data_set)
-# data = dataiter.next()
-# # print(data)
-# # print(data[0][0].shape)
-# # print(data[1][0])
-# plt.imshow(data[0][0].view(28,28))
-# plt.show()
 
 class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
-        self.fc1 = nn.Linear(28*28, 16)
+        self.fc1 = nn.Linear(28 * 28, 16)
         self.fc2 = nn.Linear(16, 16)
         self.fc3 = nn.Linear(16, 10)
 
@@ -87,16 +40,27 @@ class Model(nn.Module):
         return F.log_softmax(x, dim=1)
 
 
-def train(args, net, device, train_data_set, optimizer, criterion, epoch,   train_losses, train_counter):
+def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter):
+    one_hot = torch.eye(10)
+
     net.train()
     for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
+        print("y_batch = \n", y_batch)
 
-        x_batch = x_batch.view(-1, 28*28)
-        # x_batch = x_batch.to(device)
-        x_batch = x_batch.cuda(device)
-        # y_batch = y_batch.to(device)
-        y_batch = y_batch.cuda(device)
+        y_batch_tensor = torch.empty(DEF_BATCH_SIZE, 10)
+        # print("y_batch_tensor = \n", y_batch_tensor)
+        for y_idx, y in enumerate(y_batch):
+            y_batch_tensor[y_idx] = one_hot[y]
+        
+        print(y_batch_tensor.size())
+        print("new y_batch_tensor = \n", y_batch_tensor)
+
+        x_batch = x_batch.view(-1, 28 * 28).to(device)
+        y_batch = y_batch.to(device)
         y_pred = net(x_batch)
+
+        print(y_pred.size())
+        print(y_pred)
 
         loss = criterion(y_pred, y_batch)
         optimizer.zero_grad()
@@ -104,30 +68,28 @@ def train(args, net, device, train_data_set, optimizer, criterion, epoch,   trai
         optimizer.step()
         if batch_idx % LOG_INTERVAL == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, 
-                batch_idx * len(x_batch), 
+                epoch,
+                batch_idx * len(x_batch),
                 len(train_data_set.dataset),
-                100. * batch_idx / len(train_data_set), 
+                100. * batch_idx / len(train_data_set),
                 loss.item())
             )
             train_losses.append(loss.item())
-            train_counter.append( (batch_idx * DEF_BATCH_SIZE) + ((epoch)*len(train_data_set.dataset)) )
+            train_counter.append((batch_idx * DEF_BATCH_SIZE) + ((epoch) * len(train_data_set.dataset)))
             # torch.save(net.state_dict(), '/results/model.pth')
             # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
 
+        break
 
-def test(args, net, device, test_data_set, criterion,   test_losses):
+def test(args, net, device, test_data_set, criterion, test_losses):
     net.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
         for x_batch, y_batch in test_data_set:
 
-            x_batch = x_batch.view(-1, 28*28)
-            # x_batch = x_batch.to(device)
-            x_batch = x_batch.cuda(device)
-            # y_batch = y_batch.to(device)
-            y_batch = y_batch.cuda(device)
+            x_batch = x_batch.view(-1, 28 * 28).to(device)
+            y_batch = y_batch.to(device)
             y_pred = net(x_batch)
 
             test_loss += criterion(y_pred, y_batch, size_average=False).item()
@@ -136,149 +98,64 @@ def test(args, net, device, test_data_set, criterion,   test_losses):
             test_loss /= len(test_data_set.dataset)
             test_losses.append(test_loss)
             print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-                test_loss, 
-                correct, 
+                test_loss,
+                correct,
                 len(test_data_set.dataset),
                 100. * correct / len(test_data_set.dataset))
             )
 
+
 def main():
+    parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+    parser.add_argument('--epochs', type=int, default=1, metavar='N', help='number of epochs to train (default: 1)')
+    args = parser.parse_args()
+
     random_seed = 1
     torch.backends.cudnn.enabled = False
     torch.manual_seed(random_seed)
 
     use_cuda = torch.cuda.is_available()
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    # device = torch.device("cpu")
     print(device)
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
-# fig, axs = plt.subplots(2, 2)
-# for i in range(2):
-#     for j in range(2):
-#         Z = np.random.rand(6, 10)
-#         axs[i, j].pcolor(Z)
-#         axs[i, j].set_title('%d:%d' %(i, j))
-# plt.show()
+    train_loader = datasets.MNIST('.', train=True,  transform=transforms.Compose([transforms.ToTensor()]), download=True)
+    test_loader  = datasets.MNIST('.', train=False, transform=transforms.Compose([transforms.ToTensor()]), download=True)
 
-    train_loader = datasets.MNIST('D:\\PyTorch\\', train=True,  transform = transforms.Compose([transforms.ToTensor()]), download=True)
-    test_loader  = datasets.MNIST('D:\\PyTorch\\', train=False, transform = transforms.Compose([transforms.ToTensor()]), download=True)
-
-    train_data_set = DataLoader(train_loader, batch_size=DEF_BATCH_SIZE, shuffle=True, **kwargs)
+    train_data_set = DataLoader(train_loader, batch_size=DEF_BATCH_SIZE, shuffle=True,  **kwargs)
     test_data_set  = DataLoader(test_loader,  batch_size=DEF_BATCH_SIZE, shuffle=False, **kwargs)
 
     net = Model().to(device)
     print(net)
 
-    # x = torch.rand((28, 28))
-    # x = x.view(-1, 28*28)
-    # output = net(x)
-    # print (output)
-
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
-
     criterion = F.nll_loss
     # criterion = F.mse_loss
 
     train_losses  = []
     train_counter = []
     test_losses   = []
-    test_counter  = [i*len(train_data_set.dataset) for i in range(EPOCHS + 1)]
+    test_counter  = [i * len(train_data_set.dataset) for i in range(args.epochs + 1)]
 
-    # test("", net, device, test_data_set, criterion, test_losses)
-    for epoch in range(EPOCHS):
-        train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
-        test (0, net, device, test_data_set,  criterion, test_losses)
+    train(0, net, device, train_data_set, optimizer, criterion, 0, train_losses, train_counter)
+    # # test("", net, device, test_data_set, criterion, test_losses)
+    # for epoch in range(args.epochs):
+    #     train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
+    #     test(0, net, device, test_data_set, criterion, test_losses)
 
-# fig = plt.figure()
-# plt.plot(train_counter, train_losses, color='blue')
-# plt.scatter(test_counter, test_losses, color='red')
-# plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
-# plt.xlabel('number of training examples seen')
-# plt.ylabel('negative log likelihood loss')
-# plt.show()
+    # print(train_counter)
+    # # print(len(train_data_set.dataset))
+    # print(test_counter)
 
-# ones_arr = torch.ones(28, 28)
-# ones_dot_five = nn.init.constant_(torch.ones(28, 28), 0.5)
-# # print (ones_dot_five)
+    # # fig = plt.figure()
+    # plt.plot(train_counter, train_losses, color='blue')
+    # plt.plot(test_counter,  test_losses,  color='red')
+    # # plt.scatter(test_counter, test_losses, color='red')
+    # plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
+    # plt.xlabel('number of training examples seen')
+    # plt.ylabel('negative log likelihood loss')
+    # plt.show()
 
-# for epoch in range(EPOCHS):
-#     print("epoch %d" %(epoch))
-#     for x_batch, y_batch in train_data_set:
-#         # y_batch = y_batch.float()
-#         # x, y = data
-#         # net.zero_grad()
-#         y_pred = net(x_batch.view(-1, 28*28))
-
-#         # # Debug print:
-#         # fig, axs = plt.subplots(2, 5, sharex=True, sharey=True)
-#         # for i in range(2):
-#         #     for j in range(5):
-#         #         # print(x_batch[2*i+j])
-#         #         axs[i, j].imshow(ones_arr - x_batch[2*i+j][0], cmap='gray')
-#         #         # axs[i, j].imshow(ones_arr - x_batch[2*i+j][0])
-#         #         axs[i, j].set_title('%d' %(y_batch[2*i+j]))
-#         # # print(ones_dot_five - x_batch[0][0])
-#         # plt.show()
-#         # break
-
-#         # loss = F.nll_loss(y_pred, y_batch)
-#         # print(x_batch.dtype)
-#         # print(y_batch.dtype)
-#         # print(y_batch_1.dtype)
-#         # print(y_pred.dtype)
-#         # # print("loss:")
-#         # print(loss.dtype)
-
-#         # break
-
-#         print(x_batch.size())
-#         print(y_batch.size())
-#         print(y_pred.size())
-#         print(y_pred)
-
-#         break
-
-#         # loss = criterion(y_pred.to(torch.float), y_batch.to(torch.float))
-#         loss = criterion(y_pred, y_batch.float())
-
-#         # # net.zero_grad()
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
-
-#         # break
-#     # print("loss:", loss)
-
-
-
-
-# # # create classifier and optimizer objects
-# # clf = CNNClassifier()
-# # opt = optim.SGD(clf.parameters(), lr=0.01, momentum=0.5)
-
-# # loss_history = []
-# # acc_history = []
-
-# # def train(epoch):
-# #     clf.train() # set model in training mode (need this because of dropout)
-    
-# #     # dataset API gives us pythonic batching 
-# #     for batch_id, (data, label) in enumerate(train_loader):
-# #         data = Variable(data)
-# #         target = Variable(label)
-        
-# #         # forward pass, calculate loss and backprop!
-# #         opt.zero_grad()
-# #         preds = clf(data)
-# #         loss = F.nll_loss(preds, target)
-# #         loss.backward()
-# #         loss_history.append(loss.data[0])
-# #         opt.step()
-        
-# #         if batch_id % 100 == 0:
-# #             print(loss.data[0])
 
 if __name__ == '__main__':
     main()
