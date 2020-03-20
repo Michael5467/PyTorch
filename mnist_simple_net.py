@@ -23,7 +23,7 @@ import numpy as np
 DEF_BATCH_SIZE = 10
 LEARNING_RATE = 1e-3
 MOMENTUM = 0.5
-LOG_INTERVAL = 10
+LOG_INTERVAL = 100
 
 
 class Model(nn.Module):
@@ -41,27 +41,32 @@ class Model(nn.Module):
 
 
 def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter):
-    one_hot = torch.eye(10)
+    # one_hot = torch.eye(10)
 
     net.train()
     for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
-        print("y_batch = \n", y_batch)
+        # print("y_batch")
+        # print(y_batch)
 
-        y_batch_tensor = torch.empty(DEF_BATCH_SIZE, 10)
-        # print("y_batch_tensor = \n", y_batch_tensor)
-        for y_idx, y in enumerate(y_batch):
-            y_batch_tensor[y_idx] = one_hot[y]
-        
-        print(y_batch_tensor.size())
-        print("new y_batch_tensor = \n", y_batch_tensor)
+        # y_batch_tensor = torch.empty(DEF_BATCH_SIZE, 10)
+        # # print("y_batch_tensor = \n", y_batch_tensor)
+        # for y_idx, y in enumerate(y_batch):
+        #     y_batch_tensor[y_idx] = one_hot[y]
+
+        # print("new y_batch_tensor")
+        # print(y_batch_tensor.size())
+        # print(y_batch_tensor)
+
+        # y_batch_tensor = y_batch_tensor.to(device)
 
         x_batch = x_batch.view(-1, 28 * 28).to(device)
         y_batch = y_batch.to(device)
         y_pred = net(x_batch)
 
-        print(y_pred.size())
-        print(y_pred)
+        # print(y_pred.size())
+        # print(y_pred)
 
+        # loss = criterion(y_pred, y_batch_tensor)
         loss = criterion(y_pred, y_batch)
         optimizer.zero_grad()
         loss.backward()
@@ -75,11 +80,10 @@ def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_
                 loss.item())
             )
             train_losses.append(loss.item())
-            train_counter.append((batch_idx * DEF_BATCH_SIZE) + ((epoch) * len(train_data_set.dataset)))
+            train_counter.append((batch_idx * DEF_BATCH_SIZE) + ((epoch - 1) * len(train_data_set.dataset)))
             # torch.save(net.state_dict(), '/results/model.pth')
             # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
 
-        break
 
 def test(args, net, device, test_data_set, criterion, test_losses):
     net.eval()
@@ -137,24 +141,24 @@ def main():
     test_losses   = []
     test_counter  = [i * len(train_data_set.dataset) for i in range(args.epochs + 1)]
 
-    train(0, net, device, train_data_set, optimizer, criterion, 0, train_losses, train_counter)
-    # # test("", net, device, test_data_set, criterion, test_losses)
-    # for epoch in range(args.epochs):
-    #     train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
-    #     test(0, net, device, test_data_set, criterion, test_losses)
+    # train(0, net, device, train_data_set, optimizer, criterion, 0, train_losses, train_counter)
+    test("", net, device, test_data_set, criterion, test_losses)
+    for epoch in range(1, args.epochs + 1):
+        train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
+        test(0, net, device, test_data_set, criterion, test_losses)
 
-    # print(train_counter)
+    print(train_counter)
     # # print(len(train_data_set.dataset))
-    # print(test_counter)
+    print(test_counter)
 
-    # # fig = plt.figure()
+    # fig = plt.figure()
     # plt.plot(train_counter, train_losses, color='blue')
-    # plt.plot(test_counter,  test_losses,  color='red')
-    # # plt.scatter(test_counter, test_losses, color='red')
-    # plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
-    # plt.xlabel('number of training examples seen')
-    # plt.ylabel('negative log likelihood loss')
-    # plt.show()
+    plt.plot(test_counter,  test_losses,  color='red')
+    # plt.scatter(test_counter, test_losses, color='red')
+    plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
+    plt.xlabel('number of training examples seen')
+    plt.ylabel('negative log likelihood loss')
+    plt.show()
 
 
 if __name__ == '__main__':
