@@ -20,7 +20,7 @@ from torchvision import transforms, datasets
 import matplotlib.pyplot as plt
 import numpy as np
 
-DEF_BATCH_SIZE = 10
+DEF_BATCH_SIZE = 16
 LEARNING_RATE = 1e-3
 MOMENTUM = 0.5
 LOG_INTERVAL = 100
@@ -79,8 +79,8 @@ def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_
                 100. * batch_idx / len(train_data_set),
                 loss.item())
             )
+            train_counter.append((batch_idx * DEF_BATCH_SIZE) + ((epoch) * len(train_data_set.dataset)))
             train_losses.append(loss.item())
-            train_counter.append((batch_idx * DEF_BATCH_SIZE) + ((epoch - 1) * len(train_data_set.dataset)))
             # torch.save(net.state_dict(), '/results/model.pth')
             # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
 
@@ -99,14 +99,14 @@ def test(args, net, device, test_data_set, criterion, test_losses):
             test_loss += criterion(y_pred, y_batch, size_average=False).item()
             pred = y_pred.data.max(1, keepdim=True)[1]
             correct += pred.eq(y_batch.data.view_as(pred)).sum()
-            test_loss /= len(test_data_set.dataset)
-            test_losses.append(test_loss)
-            print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-                test_loss,
-                correct,
-                len(test_data_set.dataset),
-                100. * correct / len(test_data_set.dataset))
-            )
+    test_loss /= len(test_data_set.dataset)
+    test_losses.append(test_loss)
+    print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+        test_loss,
+        correct,
+        len(test_data_set.dataset),
+        100. * correct / len(test_data_set.dataset))
+    )
 
 
 def main():
@@ -136,25 +136,26 @@ def main():
     criterion = F.nll_loss
     # criterion = F.mse_loss
 
-    train_losses  = []
     train_counter = []
+    train_losses  = []
+    test_counter  = [(i + 1) * len(train_data_set.dataset) for i in range(args.epochs)]
     test_losses   = []
-    test_counter  = [i * len(train_data_set.dataset) for i in range(args.epochs + 1)]
 
     # train(0, net, device, train_data_set, optimizer, criterion, 0, train_losses, train_counter)
-    test("", net, device, test_data_set, criterion, test_losses)
-    for epoch in range(1, args.epochs + 1):
+    # test("", net, device, test_data_set, criterion, test_losses)
+    for epoch in range(args.epochs):
         train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
         test(0, net, device, test_data_set, criterion, test_losses)
 
-    print(train_counter)
-    # # print(len(train_data_set.dataset))
-    print(test_counter)
+    # print(train_counter)
+    # print(train_losses)
+    # print(test_counter)
+    # print(test_losses)
 
     # fig = plt.figure()
-    # plt.plot(train_counter, train_losses, color='blue')
-    plt.plot(test_counter,  test_losses,  color='red')
-    # plt.scatter(test_counter, test_losses, color='red')
+    plt.plot(train_counter, train_losses, color='blue')
+    # plt.plot(test_counter,  test_losses,  color='red')
+    plt.scatter(test_counter, test_losses, color='red')
     plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
     plt.xlabel('number of training examples seen')
     plt.ylabel('negative log likelihood loss')
