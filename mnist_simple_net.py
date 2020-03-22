@@ -20,10 +20,14 @@ from torchvision import transforms, datasets
 import matplotlib.pyplot as plt
 import numpy as np
 
+import pickle
+
 DEF_BATCH_SIZE = 16
 LEARNING_RATE = 1e-3
 MOMENTUM = 0.5
 LOG_INTERVAL = 100
+# LOSS_FUNCTION = {'nll': 1, 'mse': 2}
+LOSS_FUNCTION = 'mse'  #  'mse'
 
 
 class Model(nn.Module):
@@ -37,40 +41,40 @@ class Model(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
-        return F.log_softmax(x, dim=1)
+        if (LOSS_FUNCTION == 'nll'):
+            return F.log_softmax(x, dim=1)
+        if (LOSS_FUNCTION == 'mse'):
+            return F.softmax(x, dim=1)
+        return x
+
+
+def convert_y_batch(y_batch):
+    if (LOSS_FUNCTION == 'mse'):
+        y_batch_temp = torch.zeros(DEF_BATCH_SIZE, 10)
+        for y_idx, y in enumerate(y_batch):
+            y_batch_temp[y_idx][y] = 1.
+        return y_batch_temp
+    if (LOSS_FUNCTION == 'nll'):
+        return y_batch
 
 
 def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter):
-    # one_hot = torch.eye(10)
-
     net.train()
     for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
-        # print("y_batch")
-        # print(y_batch)
-
-        # y_batch_tensor = torch.empty(DEF_BATCH_SIZE, 10)
-        # # print("y_batch_tensor = \n", y_batch_tensor)
-        # for y_idx, y in enumerate(y_batch):
-        #     y_batch_tensor[y_idx] = one_hot[y]
-
-        # print("new y_batch_tensor")
-        # print(y_batch_tensor.size())
-        # print(y_batch_tensor)
-
-        # y_batch_tensor = y_batch_tensor.to(device)
-
+        # Prepare 'x' and 'y' batchs...
         x_batch = x_batch.view(-1, 28 * 28).to(device)
-        y_batch = y_batch.to(device)
+        y_batch = convert_y_batch(y_batch).to(device)
+
+        # Net model running...
         y_pred = net(x_batch)
 
-        # print(y_pred.size())
-        # print(y_pred)
-
-        # loss = criterion(y_pred, y_batch_tensor)
+        # Loss calculation and training...
         loss = criterion(y_pred, y_batch)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+        # Debug and statistic print...
         if batch_idx % LOG_INTERVAL == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch,
@@ -81,8 +85,6 @@ def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_
             )
             train_counter.append((batch_idx * DEF_BATCH_SIZE) + ((epoch) * len(train_data_set.dataset)))
             train_losses.append(loss.item())
-            # torch.save(net.state_dict(), '/results/model.pth')
-            # torch.save(optimizer.state_dict(), '/results/optimizer.pth')
 
 
 def test(args, net, device, test_data_set, criterion, test_losses):
@@ -91,14 +93,23 @@ def test(args, net, device, test_data_set, criterion, test_losses):
     correct = 0
     with torch.no_grad():
         for x_batch, y_batch in test_data_set:
-
+            # Prepare 'x' and 'y' batchs...
             x_batch = x_batch.view(-1, 28 * 28).to(device)
-            y_batch = y_batch.to(device)
+            y_batch = convert_y_batch(y_batch).to(device)
+
+            # Net model running...
             y_pred = net(x_batch)
 
+            # Loss calculation for log only...
             test_loss += criterion(y_pred, y_batch, size_average=False).item()
             pred = y_pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(y_batch.data.view_as(pred)).sum()
+            correct += pred.eq(y_batch.data.view_as(pred)).sum().item()
+
+            # test_loss += criterion(y_pred, y_batch, reduction='sum').item()  # sum up batch loss
+            # pred = y_pred.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            # correct += pred.eq(y_batch.view_as(pred)).sum().item()
+
+    # Debug and statistic print...
     test_loss /= len(test_data_set.dataset)
     test_losses.append(test_loss)
     print('\nTest set: Avg. loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
@@ -110,9 +121,18 @@ def test(args, net, device, test_data_set, criterion, test_losses):
 
 
 def main():
+    # Input parameters parsing and setting...
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--epochs', type=int, default=1, metavar='N', help='number of epochs to train (default: 1)')
+    parser.add_argument('--epochs', type=int,            default=1,     metavar='N', help='number of epochs to train (default: 1)'                )
+    parser.add_argument('--loss',   type=str,            default='nll', metavar='N', help='criterion function: \'nll\' or \'mse\'  (default: nll)')
+    parser.add_argument('--save',   action='store_true', default=False,              help='save training results (default: false)')
+    parser.add_argument('--load',   action='store_true', default=False,              help='load training results and skeep training (default: false)')
     args = parser.parse_args()
+
+    LOSS_FUNCTION = args.loss
+    if (LOSS_FUNCTION != 'mse') and (LOSS_FUNCTION != 'nll'):
+        print("Wrong loss function! NLL will be used!")
+        LOSS_FUNCTION = 'nll'
 
     random_seed = 1
     torch.backends.cudnn.enabled = False
@@ -123,34 +143,58 @@ def main():
     print(device)
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
+    # Dataset loading...
     train_loader = datasets.MNIST('.', train=True,  transform=transforms.Compose([transforms.ToTensor()]), download=True)
     test_loader  = datasets.MNIST('.', train=False, transform=transforms.Compose([transforms.ToTensor()]), download=True)
 
     train_data_set = DataLoader(train_loader, batch_size=DEF_BATCH_SIZE, shuffle=True,  **kwargs)
     test_data_set  = DataLoader(test_loader,  batch_size=DEF_BATCH_SIZE, shuffle=False, **kwargs)
 
+    # Neural network instantiation...
     net = Model().to(device)
     print(net)
-
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
-    criterion = F.nll_loss
-    # criterion = F.mse_loss
+    if (LOSS_FUNCTION == 'mse'):
+        criterion = F.mse_loss
+    if (LOSS_FUNCTION == 'nll'):
+        criterion = F.nll_loss
 
     train_counter = []
     train_losses  = []
     test_counter  = [(i + 1) * len(train_data_set.dataset) for i in range(args.epochs)]
     test_losses   = []
 
-    # train(0, net, device, train_data_set, optimizer, criterion, 0, train_losses, train_counter)
-    # test("", net, device, test_data_set, criterion, test_losses)
-    for epoch in range(args.epochs):
-        train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
+    # Tarining and testing...
+    if (True or args.load):
+        net.load_state_dict(torch.load('./results/model.pth'))
         test(0, net, device, test_data_set, criterion, test_losses)
+    else:
+        for epoch in range(args.epochs):
+            train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
+            if (args.save):
+                # Save model and optimizer every training epoch...
+                file_name = './results/model.%02d.pth' % epoch
+                torch.save(net.state_dict(),       file_name)
+                file_name = './results/optimizer.%02d.pth' % epoch
+                torch.save(optimizer.state_dict(), file_name)
+                # Save (rewrite) full training model for recovery...
+                torch.save(net.state_dict(),       './results/model.pth')
+            test(0, net, device, test_data_set, criterion, test_losses)
 
-    # print(train_counter)
-    # print(train_losses)
-    # print(test_counter)
-    # print(test_losses)
+    # Log output...
+    # # print(train_counter)
+    # # print(train_losses)
+    # # print(test_counter)
+    # # print(test_losses)
+
+    with open('./logs/train_counter_%s' % LOSS_FUNCTION, 'wb') as fp:
+        pickle.dump(train_counter, fp)
+    with open('./logs/train_losses_%s' % LOSS_FUNCTION, 'wb') as fp:
+        pickle.dump(train_losses, fp)
+    with open('./logs/test_counter_%s' % LOSS_FUNCTION, 'wb') as fp:
+        pickle.dump(test_counter, fp)
+    with open('./logs/test_losses_%s' % LOSS_FUNCTION, 'wb') as fp:
+        pickle.dump(test_losses, fp)
 
     # fig = plt.figure()
     plt.plot(train_counter, train_losses, color='blue')
