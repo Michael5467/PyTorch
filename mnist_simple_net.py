@@ -21,40 +21,75 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import pickle
+from options import Options, attrs
 
-DEF_BATCH_SIZE = 16
-LEARNING_RATE = 1e-3
-MOMENTUM = 0.5
+
+DEF_BATCH_SIZE = 10
+# LEARNING_RATE = 1e-3
+# MOMENTUM = 0.5
 LOG_INTERVAL = 100
-# LOSS_FUNCTION = {'nll': 1, 'mse': 2}
-LOSS_FUNCTION = 'mse'  #  'mse'
+# # LOSS_FUNCTION = {'nll': 1, 'mse': 2}
+# LOSS_FUNCTION = 'mse'  # 'mse'
+
+
+# Global paramerets...
+class Global_Params(object):
+
+    options = Options(
+        epochs        = 1,
+        batch_size    = DEF_BATCH_SIZE,
+        learning_rate = 1e-3,
+        momentum      = 0.5,
+        log_interval  = 100,
+        loss_function = 'nll',
+    )
+
+    def __init__(self, **kwargs):
+        self.options = Global_Params.options.push(kwargs)
+
+    def set_opts(self, **kwargs):
+        self.options.set(**kwargs)
+
+    def self_print(self):
+        print(attrs(self.options))
 
 
 class Model(nn.Module):
-    def __init__(self):
+    options = Options(
+        loss_function = 'nll'
+    )
+
+    def __init__(self, **kwargs):
         super(Model, self).__init__()
         self.fc1 = nn.Linear(28 * 28, 16)
         self.fc2 = nn.Linear(16, 16)
         self.fc3 = nn.Linear(16, 10)
+        self.options = Model.options.push(kwargs)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
-        if (LOSS_FUNCTION == 'nll'):
+        if (self.options.loss_function == 'nll'):
             return F.log_softmax(x, dim=1)
-        if (LOSS_FUNCTION == 'mse'):
+        if (self.options.loss_function == 'mse'):
             return F.softmax(x, dim=1)
         return x
 
+    def set_opts(self, **kwargs):
+        self.options.set(**kwargs)
 
-def convert_y_batch(y_batch):
-    if (LOSS_FUNCTION == 'mse'):
+    def self_print(self):
+        print(self.options.loss_function)
+
+
+def convert_y_batch(y_batch, net):
+    if (net.options.loss_function == 'mse'):
         y_batch_temp = torch.zeros(DEF_BATCH_SIZE, 10)
         for y_idx, y in enumerate(y_batch):
             y_batch_temp[y_idx][y] = 1.
         return y_batch_temp
-    if (LOSS_FUNCTION == 'nll'):
+    if (net.options.loss_function == 'nll'):
         return y_batch
 
 
@@ -63,7 +98,7 @@ def train(args, net, device, train_data_set, optimizer, criterion, epoch, train_
     for batch_idx, (x_batch, y_batch) in enumerate(train_data_set):
         # Prepare 'x' and 'y' batchs...
         x_batch = x_batch.view(-1, 28 * 28).to(device)
-        y_batch = convert_y_batch(y_batch).to(device)
+        y_batch = convert_y_batch(y_batch, net).to(device)
 
         # Net model running...
         y_pred = net(x_batch)
@@ -95,7 +130,7 @@ def test(args, net, device, test_data_set, criterion, test_losses):
         for x_batch, y_batch in test_data_set:
             # Prepare 'x' and 'y' batchs...
             x_batch = x_batch.view(-1, 28 * 28).to(device)
-            y_batch = convert_y_batch(y_batch).to(device)
+            y_batch = convert_y_batch(y_batch, net).to(device)
 
             # Net model running...
             y_pred = net(x_batch)
@@ -123,16 +158,18 @@ def test(args, net, device, test_data_set, criterion, test_losses):
 def main():
     # Input parameters parsing and setting...
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--epochs', type=int,            default=1,     metavar='N', help='number of epochs to train (default: 1)'                )
-    parser.add_argument('--loss',   type=str,            default='nll', metavar='N', help='criterion function: \'nll\' or \'mse\'  (default: nll)')
-    parser.add_argument('--save',   action='store_true', default=False,              help='save training results (default: false)')
-    parser.add_argument('--load',   action='store_true', default=False,              help='load training results and skeep training (default: false)')
+    parser.add_argument('--epochs', type=int, default=1,     metavar='N',         help='number of epochs to train (default: 1)')
+    parser.add_argument('--loss',   type=str, default='nll', metavar='N',         help='criterion function: \'nll\' or \'mse\'  (default: nll)')
+    parser.add_argument('--save',             default=False, action='store_true', help='save training results (default: false)')
+    parser.add_argument('--load',             default=False, action='store_true', help='load training results and skeep training (default: false)')
     args = parser.parse_args()
 
-    LOSS_FUNCTION = args.loss
-    if (LOSS_FUNCTION != 'mse') and (LOSS_FUNCTION != 'nll'):
+    if (args.loss != 'mse') and (args.loss != 'nll'):
         print("Wrong loss function! NLL will be used!")
-        LOSS_FUNCTION = 'nll'
+        args.loss = 'nll'
+    global_params = Global_Params()
+    global_params.self_print()
+    params = global_params.options
 
     random_seed = 1
     torch.backends.cudnn.enabled = False
@@ -147,16 +184,18 @@ def main():
     train_loader = datasets.MNIST('.', train=True,  transform=transforms.Compose([transforms.ToTensor()]), download=True)
     test_loader  = datasets.MNIST('.', train=False, transform=transforms.Compose([transforms.ToTensor()]), download=True)
 
-    train_data_set = DataLoader(train_loader, batch_size=DEF_BATCH_SIZE, shuffle=True,  **kwargs)
-    test_data_set  = DataLoader(test_loader,  batch_size=DEF_BATCH_SIZE, shuffle=False, **kwargs)
+    train_data_set = DataLoader(train_loader, batch_size=params.batch_size, shuffle=True,  **kwargs)
+    test_data_set  = DataLoader(test_loader,  batch_size=params.batch_size, shuffle=False, **kwargs)
 
     # Neural network instantiation...
-    net = Model().to(device)
+    net = Model(loss_function=args.loss).to(device)
     print(net)
-    optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
-    if (LOSS_FUNCTION == 'mse'):
+    net.self_print()
+
+    optimizer = optim.Adam(net.parameters(), lr=params.learning_rate)
+    if (args.loss == 'mse'):
         criterion = F.mse_loss
-    if (LOSS_FUNCTION == 'nll'):
+    if (args.loss == 'nll'):
         criterion = F.nll_loss
 
     train_counter = []
@@ -165,7 +204,7 @@ def main():
     test_losses   = []
 
     # Tarining and testing...
-    if (True or args.load):
+    if (args.load):
         net.load_state_dict(torch.load('./results/model.pth'))
         test(0, net, device, test_data_set, criterion, test_losses)
     else:
@@ -179,27 +218,28 @@ def main():
                 torch.save(optimizer.state_dict(), file_name)
                 # Save (rewrite) full training model for recovery...
                 torch.save(net.state_dict(),       './results/model.pth')
-            test(0, net, device, test_data_set, criterion, test_losses)
+            # test(0, net, device, test_data_set, criterion, test_losses)
 
     # Log output...
+
     # # print(train_counter)
     # # print(train_losses)
     # # print(test_counter)
     # # print(test_losses)
 
-    with open('./logs/train_counter_%s' % LOSS_FUNCTION, 'wb') as fp:
+    with open('./logs/train_counter_%s' % args.loss, 'wb') as fp:
         pickle.dump(train_counter, fp)
-    with open('./logs/train_losses_%s' % LOSS_FUNCTION, 'wb') as fp:
+    with open('./logs/train_losses_%s' % args.loss, 'wb') as fp:
         pickle.dump(train_losses, fp)
-    with open('./logs/test_counter_%s' % LOSS_FUNCTION, 'wb') as fp:
+    with open('./logs/test_counter_%s' % args.loss, 'wb') as fp:
         pickle.dump(test_counter, fp)
-    with open('./logs/test_losses_%s' % LOSS_FUNCTION, 'wb') as fp:
+    with open('./logs/test_losses_%s' % args.loss, 'wb') as fp:
         pickle.dump(test_losses, fp)
 
     # fig = plt.figure()
     plt.plot(train_counter, train_losses, color='blue')
     # plt.plot(test_counter,  test_losses,  color='red')
-    plt.scatter(test_counter, test_losses, color='red')
+    # plt.scatter(test_counter, test_losses, color='red')
     plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
     plt.xlabel('number of training examples seen')
     plt.ylabel('negative log likelihood loss')

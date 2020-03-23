@@ -26,5 +26,9 @@ ignore =
 
     # multiple spaces before operator
     E221
-    #line too long (126 > 79 characters)
+    # line too long (126 > 79 characters)
     E501
+    # unexpected spaces around keyword / parameter 
+    E251
+    # multiple spaces after ','
+    E241
