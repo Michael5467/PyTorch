@@ -212,12 +212,12 @@ def main():
             train(0, net, device, train_data_set, optimizer, criterion, epoch, train_losses, train_counter)
             if (args.save):
                 # Save model and optimizer every training epoch...
-                file_name = './results/model.%02d.pth' % epoch
+                file_name = './results/model_%s.%02d.pth' % (args.loss, epoch)
                 torch.save(net.state_dict(),       file_name)
-                file_name = './results/optimizer.%02d.pth' % epoch
+                file_name = './results/optimizer_%s.%02d.pth' % (args.loss, epoch)
                 torch.save(optimizer.state_dict(), file_name)
                 # Save (rewrite) full training model for recovery...
-                torch.save(net.state_dict(),       './results/model.pth')
+                torch.save(net.state_dict(),       './results/model_%s.pth' % args.loss)
             # test(0, net, device, test_data_set, criterion, test_losses)
 
     # Log output...
